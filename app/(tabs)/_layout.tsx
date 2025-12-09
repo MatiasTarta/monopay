@@ -61,6 +61,22 @@ export default function TabLayout() {
           ),
         }}
       />
+
+        <Tabs.Screen
+        name="historial"
+        options={{
+          tabBarIcon: ({ focused, color }) => (
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons 
+                name={focused ? "time" : "time-outline"} 
+                size={28} 
+                color={color} 
+              />
+            </View>
+          ),
+        }}
+      />
+
     </Tabs>
   );
 }
