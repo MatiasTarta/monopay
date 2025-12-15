@@ -20,6 +20,20 @@ export default function LoginScreen() {
     });
   };
 
+
+
+
+  const handleTransaction = (targetId, amount, actionType) => {
+  // AQUI IRÁ TU CÓDIGO DE SERVIDOR LUEGO:
+  // socket.emit('new_transaction', { targetId, amount, actionType });
+  
+  console.log("Enviando al servidor:", { targetId, amount, actionType });
+  
+  // Por ahora, solo cerramos el modal visualmente
+  //setIsWizardOpen(false); 
+};
+
+
   return (
     <View style={styles.container}>
       <Text style={styles.emoji}>🏦</Text>
@@ -37,6 +51,17 @@ export default function LoginScreen() {
           <Text style={styles.buttonText}>ENTRAR AL JUEGO</Text>
         </TouchableOpacity>
       </View>
+
+      <TransferWizard
+  isVisible={isWizardOpen}
+  onClose={() => setIsWizardOpen(false)}
+  otherPlayers={INITIAL_PLAYERS}
+  
+  // ¡ESTA LÍNEA ES LA QUE FALTA O ESTÁ MAL!
+  // Conectamos el evento del hijo con la función del padre
+  onConfirmTransaction={handleTransaction} 
+/>
+
     </View>
   );
 }

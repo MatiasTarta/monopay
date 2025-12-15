@@ -48,7 +48,7 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="transferir"
+        name="transferWizard"
         options={{
           tabBarIcon: ({ focused, color }) => (
             <View style={{ alignItems: 'center', justifyContent: 'center' }}>
