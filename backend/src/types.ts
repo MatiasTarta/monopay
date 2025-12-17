@@ -1,16 +1,23 @@
 export interface Player {
-  id: string;          
-  name: string;       
-  balance: number;    
-  debt: number;        
-  isHost: boolean;     
+  id: string;
+  name: string;
+  color: string;
+  balance: number;
+  debt: number;
+  isHost: boolean;
   isProcessing: boolean;
 }
 
+export interface GameSettings {
+  goReward: number;
+  initialBalance: number;
+}
+
 export interface GameRoom {
-  code: string;        // Código de la sala (ej: "ABCD")
-  players: Player[];   // Lista de jugadores
-  history: string[];   // Historial de acciones ("Juan pagó 100")
+  code: string;
+  settings: GameSettings;
+  players: Player[];
+  history: string[];
 }
 
 export type GameDatabase = Record<string, GameRoom>;

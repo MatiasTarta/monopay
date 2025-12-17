@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "monopay",
+    "name": "Monopay",
     "slug": "monopay",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -44,6 +44,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3be33083-727c-406a-a3bc-6fef7a850546"
+      }
     }
   }
 }

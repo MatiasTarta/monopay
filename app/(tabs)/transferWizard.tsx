@@ -8,13 +8,12 @@ import {
   Text, TextInput, TouchableOpacity,
   View
 } from 'react-native';
-import { socket } from '../../services/socket'; // <--- Importamos socket
+import { socket } from '../../services/socket';
 
 export default function TransferTabScreen() {
-  // --- ESTADOS ---
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [roomCode, setRoomCode] = useState<string>('');
-  const [otherPlayers, setOtherPlayers] = useState<any[]>([]); // Jugadores reales
+  const [otherPlayers, setOtherPlayers] = useState<any[]>([]);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedTarget, setSelectedTarget] = useState<any>(null);
@@ -45,44 +44,39 @@ export default function TransferTabScreen() {
       Alert.alert("Error", msg);
     });
 
-    // 2. PEDIR DATOS ACTIVAMENTE
     if (socket.connected) {
       socket.emit('request_update_by_socket');
     } else {
       console.log("⚠️ Socket desconectado, intentando reconectar...");
       socket.connect();
-      // Esperamos un momento a que conecte para pedir datos
       setTimeout(() => socket.emit('request_update_by_socket'), 500);
     }
 
-    // RESPUESTA DE ÉXITO
     const handleSuccess = () => {
       console.log("✅ Transacción confirmada por el servidor");
-      setLoading(false); // <--- APAGAR RUEBITA
+      setLoading(false); 
       Alert.alert("¡Éxito!", "Operación realizada", [
-        { text: "OK", onPress: reset } // Reset limpia el formulario
+        { text: "OK", onPress: reset } 
       ]);
     };
 
-    // RESPUESTA DE ERROR
     const handleError = (msg: string) => {
       console.log("❌ Error recibido:", msg);
-      setLoading(false); // <--- APAGAR RUEBITA
+      setLoading(false);
       Alert.alert("Error", msg);
     };
 
     socket.on('transaction_success', handleSuccess);
     socket.on('error_message', handleError);
 
-    // PEDIR DATOS INICIALES
+
     if (socket.connected) {
       socket.emit('request_update_by_socket');
     }
 
-    // LIMPIEZA AL SALIR DE LA PANTALLA
     return () => {
       socket.off('game_updated');
-      socket.off('transaction_success', handleSuccess); // Importante borrar la función exacta
+      socket.off('transaction_success', handleSuccess);
       socket.off('error_message', handleError);
     };
   }, []);
@@ -112,7 +106,6 @@ export default function TransferTabScreen() {
       type
     });
 
-    // Si en 5 segundos no hay respuesta, desbloqueamos el botón
     setTimeout(() => {
       setLoading((currentState) => {
         if (currentState === true) {
@@ -123,7 +116,6 @@ export default function TransferTabScreen() {
       });
     }, 5000);
   };
-  // Si no hay datos, mostrar carga
   if (!currentUser) return <View style={styles.center}><Text>Cargando datos...</Text></View>;
 
 
@@ -132,13 +124,11 @@ export default function TransferTabScreen() {
     <View style={styles.content}>
       <Text style={styles.title}>¿A quién transferir?</Text>
       <View style={styles.grid}>
-        {/* BOTÓN BANCO */}
         <TouchableOpacity style={styles.card} onPress={() => { setSelectedTarget('BANK'); setStep(2); }}>
           <Text style={styles.icon}>🏦</Text>
           <Text style={styles.name}>BANCO</Text>
         </TouchableOpacity>
 
-        {/* LISTA DE JUGADORES REALES */}
         {otherPlayers.length === 0 && <Text style={{ marginTop: 20, color: '#999' }}>Esperando jugadores...</Text>}
 
         {otherPlayers.map(p => (
@@ -187,7 +177,6 @@ export default function TransferTabScreen() {
     const isBank = selectedTarget === 'BANK';
     const isLoan = isBank && bankOperationType === 'LOAN';
 
-    // Proyección local para feedback visual
     let futureBalance = currentUser.balance;
     if (isLoan) futureBalance += val;
     else futureBalance -= val;
@@ -207,7 +196,6 @@ export default function TransferTabScreen() {
             <Text style={styles.label}>Monto:</Text>
             <Text style={styles.valueBig}>${val}</Text>
           </View>
-          {/* Aviso simple de saldo */}
           <Text style={{ textAlign: 'center', color: isNegative ? 'red' : '#999', marginTop: 10 }}>
             {isNegative ? '⚠️ Quedarás en negativo' : `Saldo actual: $${currentUser.balance}`}
           </Text>
@@ -217,7 +205,7 @@ export default function TransferTabScreen() {
           <TouchableOpacity onPress={() => setStep(2)} style={styles.btnSec}><Text>Editar</Text></TouchableOpacity>
           <TouchableOpacity
             onPress={handleConfirm}
-            disabled={loading || (isNegative && !isLoan)} // Evitar confirmar si no tiene saldo (excepto prestamo)
+            disabled={loading || (isNegative && !isLoan)}
             style={[styles.btnPri, (isNegative && !isLoan) && { backgroundColor: '#ccc' }]}
           >
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>CONFIRMAR</Text>}

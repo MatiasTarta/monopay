@@ -1,10 +1,8 @@
-
 import cors from 'cors';
 import express from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import { GameDatabase } from './types';
-
 
 const app = express();
 app.use(cors());
@@ -13,19 +11,17 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-
-
 const games: GameDatabase = {};
 
 const generateRoomCode = () => Math.random().toString(36).substring(2, 6).toUpperCase();
 
-
 io.on('connection', (socket: Socket) => {
     console.log('🔌 Nuevo dispositivo conectado:', socket.id);
-
-    socket.on('join_game', ({ roomCode, playerName, action }: { roomCode?: string, playerName: string, action: 'CREATE' | 'JOIN' }) => {
+    socket.on('join_game', ({ roomCode, playerName, action, color, settings }) => {
 
         if (!playerName) return;
+        const playerColor = color || '#34495e';
+
         if (action === 'JOIN') {
             const code = roomCode?.toUpperCase();
             if (!code || !games[code]) {
@@ -37,13 +33,15 @@ io.on('connection', (socket: Socket) => {
             const existingPlayer = room.players.find(p => p.name === playerName);
 
             if (existingPlayer) {
-                console.log(`♻️  ${playerName} se reconectó (Socket ID actualizado)`);
+                console.log(`♻️  ${playerName} se reconectó`);
                 existingPlayer.id = socket.id;
+                existingPlayer.color = playerColor;
             } else {
                 room.players.push({
                     id: socket.id,
                     name: playerName,
-                    balance: 1500,
+                    color: playerColor, 
+                    balance: room.settings.initialBalance, 
                     debt: 0,
                     isHost: false,
                     isProcessing: false
@@ -57,18 +55,21 @@ io.on('connection', (socket: Socket) => {
         }
         else if (action === 'CREATE') {
             let newCode = generateRoomCode();
-            let attempts = 0;
-            while (games[newCode] && attempts < 10) {
-                console.log(`⚠️ Colisión de código ${newCode}, generando otro...`);
-                newCode = generateRoomCode();
-                attempts++;
-            }
+            while (games[newCode]) newCode = generateRoomCode();
+
+            const roomSettings = {
+                initialBalance: settings?.initialBalance || 35000,
+                goReward: settings?.goReward || 2000
+            };
+
             games[newCode] = {
                 code: newCode,
+                settings: roomSettings, 
                 players: [{
                     id: socket.id,
                     name: playerName,
-                    balance: 1500,
+                    color: playerColor, 
+                    balance: roomSettings.initialBalance,
                     debt: 0,
                     isHost: true,
                     isProcessing: false
@@ -80,10 +81,9 @@ io.on('connection', (socket: Socket) => {
             socket.emit('join_success', games[newCode]);
             io.to(newCode).emit('game_updated', games[newCode]);
 
-            console.log(`✨ Sala creada: ${newCode} por ${playerName}`);
+            console.log(`✨ Sala ${newCode} creada. Saldo Ini: ${roomSettings.initialBalance}, Salida: ${roomSettings.goReward}`);
         }
     });
-
 
     socket.on('make_transaction', ({ roomCode, targetId, amount, type }) => {
         const code = roomCode?.toUpperCase();
@@ -94,20 +94,14 @@ io.on('connection', (socket: Socket) => {
         const amountNum = parseInt(amount);
 
         if (!sender) return;
-        if (sender.isProcessing) {
-            socket.emit('error_message', '⚠️ Espera, procesando anterior...');
-            return;
-        }
+        if (sender.isProcessing) return;
 
-        sender.isProcessing = true; 
+        sender.isProcessing = true;
 
         try {
-            if (isNaN(amountNum) || amountNum <= 0) {
-                throw new Error("Monto inválido.");
-            }
             if (type === 'P2P') {
+                if (isNaN(amountNum) || amountNum <= 0) throw new Error("Monto inválido.");
                 const receiver = room.players.find(p => p.id === targetId);
-
                 if (!receiver) throw new Error("Destinatario no encontrado.");
                 if (sender.balance < amountNum) throw new Error("❌ Fondos insuficientes.");
 
@@ -116,11 +110,13 @@ io.on('connection', (socket: Socket) => {
                 room.history.push(`${sender.name} pagó $${amountNum} a ${receiver.name}`);
             }
             else if (type === 'BANK_LOAN') {
+                if (isNaN(amountNum) || amountNum <= 0) throw new Error("Monto inválido.");
                 sender.balance += amountNum;
                 sender.debt += amountNum;
                 room.history.push(`${sender.name} pidió préstamo de $${amountNum}`);
             }
             else if (type === 'BANK_PAY') {
+                if (isNaN(amountNum) || amountNum <= 0) throw new Error("Monto inválido.");
                 if (sender.balance < amountNum) throw new Error("No tienes suficiente dinero.");
 
                 sender.balance -= amountNum;
@@ -129,9 +125,11 @@ io.on('connection', (socket: Socket) => {
                 room.history.push(`${sender.name} pagó $${amountNum} al banco`);
             }
             else if (type === 'BANK_GO') {
-                sender.balance += 200;
-                room.history.push(`🏁 ${sender.name} pasó por la SALIDA`);
+                const salario = room.settings.goReward;
+                sender.balance += salario;
+                room.history.push(`🏁 ${sender.name} pasó por la SALIDA (+$${salario})`);
             }
+
             if (room.history.length > 50) room.history.shift();
             io.to(code).emit('game_updated', room);
             socket.emit('transaction_success');
@@ -144,38 +142,14 @@ io.on('connection', (socket: Socket) => {
         }
     });
 
-    socket.on('disconnect', () => {
-        for (const code in games) {
-            const room = games[code];
-            const playerIndex = room.players.findIndex(p => p.id === socket.id);
-
-            if (playerIndex !== -1) {
-                console.log(`❌ Jugador desconectado de sala ${code}`);
-            }
-        }
-    });
-
-    setInterval(() => {
-        console.log("🧹 Limpiando salas viejas...");
-    }, 1000 * 60 * 60);
-
-    socket.on('request_update', ({ roomCode }) => {
-        const code = roomCode?.toUpperCase();
-        if (code && games[code]) {
-            socket.emit('game_updated', games[code]);
-        }
-    });
+    socket.on('disconnect', () => {});
 
     socket.on('request_update_by_socket', () => {
         const roomCode = Object.keys(games).find(code =>
             games[code].players.some(p => p.id === socket.id)
         );
-
-        if (roomCode) {
-            socket.emit('game_updated', games[roomCode]);
-        }
+        if (roomCode) socket.emit('game_updated', games[roomCode]);
     });
-
 });
 
 const PORT = 3000;

@@ -1,7 +1,5 @@
 import { io } from "socket.io-client";
 const API_URL = "https://monopay-1lxl.onrender.com"; 
-// -------------------
-
 console.log("Configurando socket hacia:", API_URL);
 
 export const socket = io(API_URL, {

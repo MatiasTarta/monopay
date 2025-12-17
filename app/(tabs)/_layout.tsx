@@ -2,11 +2,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
-// 1. IMPORTAMOS ESTO
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
-  // 2. OBTENEMOS LAS MEDIDAS SEGURAS DEL TELÉFONO
   const insets = useSafeAreaInsets();
 
   return (
