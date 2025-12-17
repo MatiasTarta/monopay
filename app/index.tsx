@@ -1,38 +1,38 @@
-// Archivo: app/index.tsx
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { socket } from '../services/socket'; // <--- Importamos el socket
 
 export default function LoginScreen() {
   const [nombre, setNombre] = useState('');
   const router = useRouter();
 
   const handleLogin = () => {
-    if (nombre.length === 0) {
+    if (nombre.trim().length === 0) {
       Alert.alert("Error", "Por favor escribe tu nombre");
       return;
     }
 
-    // Navegar a la carpeta (tabs) pasando el nombre
+    console.log(`🔌 Conectando como ${nombre}...`);
+    
+    // 1. Conectar físicamente
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    // 2. Enviar mensaje al servidor (Backend)
+    // Nota: Si no mandamos roomCode, el server crea una sala nueva (Host)
+    socket.emit('join_game', { 
+      playerName: nombre 
+      // roomCode: 'ABCD' // Si quisieras unirte a una específica
+    });
+
+    // 3. Navegar a la pantalla de saldo
     router.replace({
       pathname: '/(tabs)/saldo',
       params: { userName: nombre }
     });
   };
-
-
-
-
-  const handleTransaction = (targetId, amount, actionType) => {
-  // AQUI IRÁ TU CÓDIGO DE SERVIDOR LUEGO:
-  // socket.emit('new_transaction', { targetId, amount, actionType });
-  
-  console.log("Enviando al servidor:", { targetId, amount, actionType });
-  
-  // Por ahora, solo cerramos el modal visualmente
-  //setIsWizardOpen(false); 
-};
-
 
   return (
     <View style={styles.container}>
@@ -46,22 +46,12 @@ export default function LoginScreen() {
           placeholder="Ej: Juan"
           value={nombre}
           onChangeText={setNombre}
+          autoCapitalize="words"
         />
         <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>ENTRAR AL JUEGO</Text>
+          <Text style={styles.buttonText}>CREAR PARTIDA</Text>
         </TouchableOpacity>
       </View>
-
-      <TransferWizard
-  isVisible={isWizardOpen}
-  onClose={() => setIsWizardOpen(false)}
-  otherPlayers={INITIAL_PLAYERS}
-  
-  // ¡ESTA LÍNEA ES LA QUE FALTA O ESTÁ MAL!
-  // Conectamos el evento del hijo con la función del padre
-  onConfirmTransaction={handleTransaction} 
-/>
-
     </View>
   );
 }
