@@ -4,6 +4,7 @@ export interface Player {
   balance: number;    
   debt: number;        
   isHost: boolean;     
+  isProcessing: boolean;
 }
 
 export interface GameRoom {

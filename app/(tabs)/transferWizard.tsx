@@ -22,19 +22,15 @@ export default function TransferTabScreen() {
   const [bankOperationType, setBankOperationType] = useState<'PAY' | 'LOAN'>('PAY');
   const [loading, setLoading] = useState(false);
 
-  // 1. ESCUCHAR DATOS REALES DE LA SALA
   useEffect(() => {
-    // Pedir actualización inicial (por si acaso)
-    // socket.emit('request_update'); 
-
+    console.log("💰 TransferWizard montado. Pidiendo datos...");
     socket.on('game_updated', (room) => {
+      console.log("📦 Datos recibidos en TransferWizard");
       setRoomCode(room.code);
 
-      // Encontrar mi usuario
       const me = room.players.find((p: any) => p.id === socket.id);
       setCurrentUser(me);
 
-      // Filtrar a los otros jugadores (para no transferirme a mí mismo)
       const others = room.players.filter((p: any) => p.id !== socket.id);
       setOtherPlayers(others);
     });
@@ -49,10 +45,45 @@ export default function TransferTabScreen() {
       Alert.alert("Error", msg);
     });
 
+    // 2. PEDIR DATOS ACTIVAMENTE
+    if (socket.connected) {
+      socket.emit('request_update_by_socket');
+    } else {
+      console.log("⚠️ Socket desconectado, intentando reconectar...");
+      socket.connect();
+      // Esperamos un momento a que conecte para pedir datos
+      setTimeout(() => socket.emit('request_update_by_socket'), 500);
+    }
+
+    // RESPUESTA DE ÉXITO
+    const handleSuccess = () => {
+      console.log("✅ Transacción confirmada por el servidor");
+      setLoading(false); // <--- APAGAR RUEBITA
+      Alert.alert("¡Éxito!", "Operación realizada", [
+        { text: "OK", onPress: reset } // Reset limpia el formulario
+      ]);
+    };
+
+    // RESPUESTA DE ERROR
+    const handleError = (msg: string) => {
+      console.log("❌ Error recibido:", msg);
+      setLoading(false); // <--- APAGAR RUEBITA
+      Alert.alert("Error", msg);
+    };
+
+    socket.on('transaction_success', handleSuccess);
+    socket.on('error_message', handleError);
+
+    // PEDIR DATOS INICIALES
+    if (socket.connected) {
+      socket.emit('request_update_by_socket');
+    }
+
+    // LIMPIEZA AL SALIR DE LA PANTALLA
     return () => {
       socket.off('game_updated');
-      socket.off('transaction_success');
-      socket.off('error_message');
+      socket.off('transaction_success', handleSuccess); // Importante borrar la función exacta
+      socket.off('error_message', handleError);
     };
   }, []);
 
@@ -64,33 +95,38 @@ export default function TransferTabScreen() {
     setLoading(false);
   };
 
-  // 2. ENVIAR AL SERVIDOR
   const handleConfirm = () => {
     if (!amount || parseInt(amount) <= 0) return;
+    if (loading) return;
     setLoading(true);
-
-    // Definir tipo de transacción
     let type = 'P2P';
     let targetId = selectedTarget?.id;
-
     if (selectedTarget === 'BANK') {
       type = bankOperationType === 'LOAN' ? 'BANK_LOAN' : 'BANK_PAY';
       targetId = 'BANK';
     }
-
-    // EMITIR EVENTO AL BACKEND
     socket.emit('make_transaction', {
-      roomCode,      // Para saber en qué sala ocurre
-      targetId,      // A quién (ID del jugador o 'BANK')
-      amount,        // Cuánto
-      type           // Qué tipo de operación
+      roomCode,
+      targetId,
+      amount,
+      type
     });
-  };
 
+    // Si en 5 segundos no hay respuesta, desbloqueamos el botón
+    setTimeout(() => {
+      setLoading((currentState) => {
+        if (currentState === true) {
+          Alert.alert("Tiempo agotado", "El servidor no respondió. Verifica tu conexión.");
+          return false;
+        }
+        return currentState;
+      });
+    }, 5000);
+  };
   // Si no hay datos, mostrar carga
   if (!currentUser) return <View style={styles.center}><Text>Cargando datos...</Text></View>;
 
-  // --- RENDERIZADO (IGUAL QUE ANTES PERO CON DATOS REALES) ---
+
 
   const renderStep1 = () => (
     <View style={styles.content}>
@@ -221,7 +257,7 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontWeight: 'bold' },
 
   input: { fontSize: 50, fontWeight: 'bold', marginVertical: 30, textAlign: 'center', width: '100%', color: '#333' },
-  toggleRow: { flexDirection: 'row', backgroundColor: '#e0e0e0', borderRadius: 20, padding: 4, marginBottom: 10 },
+  toggleRow: { flexDirection: 'row', backgroundColor: '#e0e0e0', borderRadius: 20, padding: 4, marginBottom: 20 },
   pill: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 16 },
   pillActive: { backgroundColor: '#fff', elevation: 2 },
   pillText: { color: '#666', fontWeight: 'bold', fontSize: 12 },

@@ -2,26 +2,57 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { socket } from '../../services/socket';
-
 export default function SaldoScreen() {
   const router = useRouter();
   const [roomData, setRoomData] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
+    console.log("🏦 Pantalla de Saldo montada. Esperando datos...");
     socket.on('game_updated', (room) => {
+      console.log("📦 Datos recibidos en Saldo");
       setRoomData(room);
+
       const me = room.players.find((p: any) => p.id === socket.id);
       setCurrentUser(me);
     });
-    return () => { socket.off('game_updated'); };
+    if (socket.connected) {
+      socket.emit('request_update_by_socket');
+    } else {
+      socket.connect();
+      setTimeout(() => socket.emit('request_update_by_socket'), 500);
+    }
+
+    return () => {
+      socket.off('game_updated');
+    };
   }, []);
 
-  // Función rápida para cobrar $200 (GO)
+
   const handleCollectGo = () => {
-    // Aún no programamos esto en el backend, pero dejamos el botón listo
-    Alert.alert("Próximamente", "Aquí enviaremos la señal al server para sumar $200");
-    // socket.emit('transaction', { type: 'GO', amount: 200 }); 
+    if (!roomData) return;
+
+    // PREGUNTA DE SEGURIDAD (UX)
+    // Evita clicks accidentales que arruinan la partida
+    Alert.alert(
+      "Pasar por la SALIDA",
+      "¿Confirmas que diste la vuelta? Se te sumarán $200.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "SÍ, COBRAR",
+          onPress: () => {
+            // Enviamos la transacción con el formato NUEVO y SEGURO
+            socket.emit('make_transaction', {
+              roomCode: roomData.code,
+              targetId: 'BANK', // Destino ficticio para cumplir el protocolo
+              amount: 200,      // Monto obligatorio
+              type: 'BANK_GO'   // El tipo exacto que espera el switch del server
+            });
+          }
+        }
+      ]
+    );
   };
 
   if (!roomData || !currentUser) {
@@ -31,13 +62,13 @@ export default function SaldoScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
+
         {/* ENCABEZADO: SALA */}
         <View style={styles.header}>
-            <Text style={styles.roomLabel}>SALA: {roomData.code}</Text>
-            <View style={styles.onlineBadge}>
-                <Text style={styles.onlineText}>🟢 {roomData.players.length} Online</Text>
-            </View>
+          <Text style={styles.roomLabel}>SALA: {roomData.code}</Text>
+          <View style={styles.onlineBadge}>
+            <Text style={styles.onlineText}>🟢 {roomData.players.length} Online</Text>
+          </View>
         </View>
 
         {/* TARJETA PRINCIPAL (SALDO) */}
@@ -45,49 +76,49 @@ export default function SaldoScreen() {
           <Text style={styles.cardTitle}>SALDO DISPONIBLE</Text>
           <Text style={styles.balanceText}>${currentUser.balance}</Text>
           {currentUser.debt > 0 && (
-             <View style={styles.debtTag}>
-                <Text style={styles.debtText}>Deuda: ${currentUser.debt}</Text>
-             </View>
+            <View style={styles.debtTag}>
+              <Text style={styles.debtText}>Deuda: ${currentUser.debt}</Text>
+            </View>
           )}
         </View>
 
-        {/* --- AQUÍ ESTÁN LOS BOTONES QUE FALTABAN --- */}
         <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-        
-        <View style={styles.actionGrid}>
-            {/* Botón 1: Cobrar GO */}
-            <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#dff9fb'}]} onPress={handleCollectGo}>
-                <Text style={styles.btnIcon}>🏁</Text>
-                <Text style={[styles.btnLabel, {color: '#130f40'}]}>Cobrar GO (+200)</Text>
-            </TouchableOpacity>
 
-            {/* Botón 2: Ir a Transferir (Atajo a la otra pestaña) */}
-            <TouchableOpacity 
-                style={[styles.actionBtn, {backgroundColor: '#eccc68'}]} 
-                onPress={() => router.push('/(tabs)/transferWizard')}
-            >
-                <Text style={styles.btnIcon}>💸</Text>
-                <Text style={[styles.btnLabel, {color: '#535c68'}]}>Transferir</Text>
-            </TouchableOpacity>
+        <View style={styles.actionGrid}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#dff9fb' }]}
+            onPress={handleCollectGo} 
+          >
+            <Text style={styles.btnIcon}>🏁</Text>
+            <Text style={[styles.btnLabel, { color: '#130f40' }]}>Cobrar GO (+$200)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#eccc68' }]}
+            onPress={() => router.push('/(tabs)/transferWizard')}
+          >
+            <Text style={styles.btnIcon}>💸</Text>
+            <Text style={[styles.btnLabel, { color: '#535c68' }]}>Transferir</Text>
+          </TouchableOpacity>
         </View>
 
         {/* LISTA RESUMIDA DE JUGADORES */}
         <Text style={styles.sectionTitle}>Ranking de Riqueza</Text>
         {roomData.players
-            .sort((a: any, b: any) => b.balance - a.balance) // Ordenar por dinero
-            .map((player: any) => (
+          .sort((a: any, b: any) => b.balance - a.balance) // Ordenar por dinero
+          .map((player: any) => (
             <View key={player.id} style={styles.playerRow}>
-                <View style={styles.rowLeft}>
-                    <View style={[styles.avatar, player.id === socket.id && styles.myAvatar]}>
-                        <Text style={styles.avatarText}>{player.name[0]}</Text>
-                    </View>
-                    <Text style={styles.playerName}>
-                        {player.name} {player.isHost && '👑'} {player.id === socket.id && '(Tú)'}
-                    </Text>
+              <View style={styles.rowLeft}>
+                <View style={[styles.avatar, player.id === socket.id && styles.myAvatar]}>
+                  <Text style={styles.avatarText}>{player.name[0]}</Text>
                 </View>
-                <Text style={styles.playerBalance}>${player.balance}</Text>
+                <Text style={styles.playerName}>
+                  {player.name} {player.isHost && '👑'} {player.id === socket.id && '(Tú)'}
+                </Text>
+              </View>
+              <Text style={styles.playerBalance}>${player.balance}</Text>
             </View>
-        ))}
+          ))}
 
       </ScrollView>
     </SafeAreaView>
@@ -98,7 +129,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f6f8' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 20 },
-  
+
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   roomLabel: { fontSize: 18, fontWeight: 'bold', color: '#2c3e50', letterSpacing: 2 },
   onlineBadge: { backgroundColor: '#dff9fb', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
@@ -111,7 +142,7 @@ const styles = StyleSheet.create({
   debtText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#34495e', marginBottom: 15 },
-  
+
   // ESTILOS DE LOS BOTONES RESTAURADOS
   actionGrid: { flexDirection: 'row', gap: 15, marginBottom: 30 },
   actionBtn: { flex: 1, padding: 20, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },

@@ -1,91 +1,87 @@
-// Archivo: app/(tabs)/historial.tsx
-import { Ionicons } from '@expo/vector-icons';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { socket } from '../../services/socket';
 
-export default function HistorialScreen() {
-  
-  // DATOS DE PRUEBA (Mocks)
-  // Cuando conectemos el backend, esto vendrá del servidor.
-  const movimientos = [
-    { id: '1', titulo: 'Cobro Salida', detalle: 'Banco', monto: 200, tipo: 'ingreso', hora: '10:45' },
-    { id: '2', titulo: 'Pago Alquiler', detalle: 'A: Juan (Av. Libertador)', monto: -50, tipo: 'gasto', hora: '10:42' },
-    { id: '3', titulo: 'Premio Lotería', detalle: 'Suerte', monto: 1000, tipo: 'ingreso', hora: '10:30' },
-    { id: '4', titulo: 'Compra Propiedad', detalle: 'Banco', monto: -350, tipo: 'gasto', hora: '10:15' },
-    { id: '5', titulo: 'Transferencia', detalle: 'De: Ana', monto: 500, tipo: 'ingreso', hora: '10:00' },
-    { id: '6', titulo: 'Multa', detalle: 'Cárcel', monto: -100, tipo: 'gasto', hora: '09:55' },
-  ];
+export default function HistoryScreen() {
+  const [roomData, setRoomData] = useState<any>(null);
 
-  // Función para dibujar cada fila de la lista
-  const renderItem = ({ item }) => {
-    const esIngreso = item.monto > 0;
-    
+  useEffect(() => {
+    console.log("📜 Historial montado");
+
+    socket.on('game_updated', (room) => {
+      setRoomData(room);
+    });
+    if (socket.connected) {
+      socket.emit('request_update_by_socket');
+    } else {
+      socket.connect();
+      setTimeout(() => socket.emit('request_update_by_socket'), 500);
+    }
+
+    return () => {
+      socket.off('game_updated');
+    };
+  }, []);
+
+  if (!roomData) {
     return (
-      <View style={styles.itemCard}>
-        {/* Icono a la izquierda */}
-        <View style={[styles.iconBox, { backgroundColor: esIngreso ? '#e8f8f5' : '#fdedec' }]}>
-          <Ionicons 
-            name={esIngreso ? "arrow-down" : "arrow-up"} 
-            size={24} 
-            color={esIngreso ? "#2ecc71" : "#e74c3c"} 
-          />
-        </View>
-
-        {/* Textos del centro */}
-        <View style={styles.infoBox}>
-          <Text style={styles.titulo}>{item.titulo}</Text>
-          <Text style={styles.detalle}>{item.detalle} • {item.hora}</Text>
-        </View>
-
-        {/* Monto a la derecha */}
-        <Text style={[styles.monto, { color: esIngreso ? "#27ae60" : "#c0392b" }]}>
-          {esIngreso ? '+' : ''} ${item.monto}
-        </Text>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2c3e50" />
+        <Text style={{ marginTop: 10, color: '#7f8c8d' }}>Cargando registros...</Text>
       </View>
     );
-  };
+  }
+  const reversedHistory = [...roomData.history].reverse();
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.headerTitle}>Registro de Actividad 📋</Text>
-      
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Historial de Movimientos</Text>
+        <Text style={styles.subtitle}>Sala: {roomData.code}</Text>
+      </View>
+
       <FlatList
-        data={movimientos}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
+        data={reversedHistory}
+        keyExtractor={(item, index) => index.toString()}
         contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
+        renderItem={({ item, index }) => (
+          <View style={styles.logRow}>
+            <View style={styles.indexCircle}>
+              <Text style={styles.indexText}>#{reversedHistory.length - index}</Text>
+            </View>
+
+            <View style={styles.textContainer}>
+              <Text style={styles.logText}>{item}</Text>
+              <Text style={styles.timeAgo}>Hace un momento</Text>
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>Aún no hay movimientos en esta partida.</Text>
+        }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', paddingTop: 50 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', marginLeft: 20, marginBottom: 20, color: '#2c3e50' },
-  
-  // Padding bottom 100 es CLAVE para que la barra flotante no tape el último item
-  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: '#f4f6f8' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  itemCard: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 15,
-    alignItems: 'center',
-    // Sombras suaves
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 }
-  },
-  
-  iconBox: { width: 45, height: 45, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  
-  infoBox: { flex: 1 },
-  titulo: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  detalle: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
-  
-  monto: { fontSize: 18, fontWeight: 'bold' }
+  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#eee', alignItems: 'center' },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#2c3e50' },
+  subtitle: { fontSize: 14, color: '#7f8c8d', marginTop: 5, letterSpacing: 1 },
+
+  listContent: { padding: 20 },
+
+  logRow: { flexDirection: 'row', backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10, alignItems: 'center', shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+
+  indexCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ecf0f1', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  indexText: { fontSize: 10, fontWeight: 'bold', color: '#7f8c8d' },
+
+  textContainer: { flex: 1 },
+  logText: { fontSize: 14, color: '#34495e', lineHeight: 20 },
+  timeAgo: { fontSize: 10, color: '#bdc3c7', marginTop: 4 },
+
+  emptyText: { textAlign: 'center', marginTop: 50, color: '#95a5a6', fontStyle: 'italic' }
 });
