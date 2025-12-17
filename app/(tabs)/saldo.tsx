@@ -31,9 +31,6 @@ export default function SaldoScreen() {
 
   const handleCollectGo = () => {
     if (!roomData) return;
-
-    // PREGUNTA DE SEGURIDAD (UX)
-    // Evita clicks accidentales que arruinan la partida
     Alert.alert(
       "Pasar por la SALIDA",
       "¿Confirmas que diste la vuelta? Se te sumarán $200.",
@@ -42,12 +39,11 @@ export default function SaldoScreen() {
         {
           text: "SÍ, COBRAR",
           onPress: () => {
-            // Enviamos la transacción con el formato NUEVO y SEGURO
             socket.emit('make_transaction', {
               roomCode: roomData.code,
-              targetId: 'BANK', // Destino ficticio para cumplir el protocolo
-              amount: 200,      // Monto obligatorio
-              type: 'BANK_GO'   // El tipo exacto que espera el switch del server
+              targetId: 'BANK', 
+              amount: 200,   
+              type: 'BANK_GO'  
             });
           }
         }
