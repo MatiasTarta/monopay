@@ -1,98 +1,128 @@
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { socket } from '../../services/socket'; // Importamos el mismo socket
+import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { socket } from '../../services/socket';
 
 export default function SaldoScreen() {
+  const router = useRouter();
   const [roomData, setRoomData] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    // 1. SOLICITAR ESTADO ACTUAL (Por si llegamos tarde)
-    // No hace falta emitir nada extra, el servidor ya nos mandó 'game_updated' al entrar,
-    // pero necesitamos poner la oreja (listener) para escucharlo.
-
-    // 2. ESCUCHAR ACTUALIZACIONES
     socket.on('game_updated', (room) => {
-      console.log("📦 Datos recibidos del servidor:", room);
       setRoomData(room);
-
-      // Buscamos cuál de todos los jugadores soy yo (por mi ID de socket)
-      const myPlayer = room.players.find((p: any) => p.id === socket.id);
-      setCurrentUser(myPlayer);
+      const me = room.players.find((p: any) => p.id === socket.id);
+      setCurrentUser(me);
     });
-
-    // Limpieza al salir de la pantalla
-    return () => {
-      socket.off('game_updated');
-    };
+    return () => { socket.off('game_updated'); };
   }, []);
 
-  // Si aún no cargan los datos...
+  // Función rápida para cobrar $200 (GO)
+  const handleCollectGo = () => {
+    // Aún no programamos esto en el backend, pero dejamos el botón listo
+    Alert.alert("Próximamente", "Aquí enviaremos la señal al server para sumar $200");
+    // socket.emit('transaction', { type: 'GO', amount: 200 }); 
+  };
+
   if (!roomData || !currentUser) {
-    return (
-      <View style={styles.container}>
-        <Text style={{textAlign: 'center', marginTop: 50}}>Conectando con el Banco...</Text>
-      </View>
-    );
+    return <View style={styles.center}><Text>Cargando partida...</Text></View>;
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* TARJETA PRINCIPAL */}
-      <View style={styles.card}>
-        <Text style={styles.label}>TU SALDO ACTUAL</Text>
-        <Text style={styles.balance}>${currentUser.balance}</Text>
-        {currentUser.debt > 0 && <Text style={styles.debt}>Deuda: ${currentUser.debt}</Text>}
-      </View>
-
-      {/* INFORMACIÓN DE LA SALA */}
-      <View style={styles.roomInfo}>
-        <Text style={styles.roomLabel}>CÓDIGO DE SALA:</Text>
-        <Text style={styles.roomCode}>{roomData.code}</Text>
-        <Text style={styles.hint}>(Comparte este código para que otros se unan)</Text>
-      </View>
-
-      {/* LISTA DE JUGADORES CONECTADOS */}
-      <Text style={styles.sectionTitle}>Jugadores en Línea ({roomData.players.length})</Text>
-      
-      <FlatList
-        data={roomData.players}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={[styles.playerRow, item.id === socket.id && styles.meRow]}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.name[0]}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        
+        {/* ENCABEZADO: SALA */}
+        <View style={styles.header}>
+            <Text style={styles.roomLabel}>SALA: {roomData.code}</Text>
+            <View style={styles.onlineBadge}>
+                <Text style={styles.onlineText}>🟢 {roomData.players.length} Online</Text>
             </View>
-            <View>
-              <Text style={styles.playerName}>
-                {item.name} {item.isHost ? '👑' : ''} {item.id === socket.id ? '(Tú)' : ''}
-              </Text>
-              <Text style={styles.playerBalance}>${item.balance}</Text>
+        </View>
+
+        {/* TARJETA PRINCIPAL (SALDO) */}
+        <View style={styles.mainCard}>
+          <Text style={styles.cardTitle}>SALDO DISPONIBLE</Text>
+          <Text style={styles.balanceText}>${currentUser.balance}</Text>
+          {currentUser.debt > 0 && (
+             <View style={styles.debtTag}>
+                <Text style={styles.debtText}>Deuda: ${currentUser.debt}</Text>
+             </View>
+          )}
+        </View>
+
+        {/* --- AQUÍ ESTÁN LOS BOTONES QUE FALTABAN --- */}
+        <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+        
+        <View style={styles.actionGrid}>
+            {/* Botón 1: Cobrar GO */}
+            <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#dff9fb'}]} onPress={handleCollectGo}>
+                <Text style={styles.btnIcon}>🏁</Text>
+                <Text style={[styles.btnLabel, {color: '#130f40'}]}>Cobrar GO (+200)</Text>
+            </TouchableOpacity>
+
+            {/* Botón 2: Ir a Transferir (Atajo a la otra pestaña) */}
+            <TouchableOpacity 
+                style={[styles.actionBtn, {backgroundColor: '#eccc68'}]} 
+                onPress={() => router.push('/(tabs)/transferWizard')}
+            >
+                <Text style={styles.btnIcon}>💸</Text>
+                <Text style={[styles.btnLabel, {color: '#535c68'}]}>Transferir</Text>
+            </TouchableOpacity>
+        </View>
+
+        {/* LISTA RESUMIDA DE JUGADORES */}
+        <Text style={styles.sectionTitle}>Ranking de Riqueza</Text>
+        {roomData.players
+            .sort((a: any, b: any) => b.balance - a.balance) // Ordenar por dinero
+            .map((player: any) => (
+            <View key={player.id} style={styles.playerRow}>
+                <View style={styles.rowLeft}>
+                    <View style={[styles.avatar, player.id === socket.id && styles.myAvatar]}>
+                        <Text style={styles.avatarText}>{player.name[0]}</Text>
+                    </View>
+                    <Text style={styles.playerName}>
+                        {player.name} {player.isHost && '👑'} {player.id === socket.id && '(Tú)'}
+                    </Text>
+                </View>
+                <Text style={styles.playerBalance}>${player.balance}</Text>
             </View>
-          </View>
-        )}
-      />
+        ))}
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f6f8', padding: 20 },
-  card: { backgroundColor: '#2c3e50', padding: 30, borderRadius: 20, alignItems: 'center', marginBottom: 20, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 5, elevation: 5 },
-  label: { color: '#bdc3c7', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
-  balance: { color: '#fff', fontSize: 48, fontWeight: 'bold', marginVertical: 10 },
-  debt: { color: '#e74c3c', fontSize: 16, fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: '#f4f6f8' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { padding: 20 },
   
-  roomInfo: { backgroundColor: '#fff', padding: 15, borderRadius: 15, alignItems: 'center', marginBottom: 30, borderWidth: 2, borderColor: '#ecf0f1', borderStyle: 'dashed' },
-  roomLabel: { color: '#7f8c8d', fontSize: 12, fontWeight: 'bold' },
-  roomCode: { color: '#2c3e50', fontSize: 32, fontWeight: 'bold', letterSpacing: 5 },
-  hint: { color: '#95a5a6', fontSize: 12, marginTop: 5 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  roomLabel: { fontSize: 18, fontWeight: 'bold', color: '#2c3e50', letterSpacing: 2 },
+  onlineBadge: { backgroundColor: '#dff9fb', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  onlineText: { color: '#22a6b3', fontWeight: 'bold', fontSize: 12 },
 
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#34495e' },
-  playerRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 10 },
-  meRow: { borderWidth: 2, borderColor: '#2ecc71' },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3498db', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  mainCard: { backgroundColor: '#2c3e50', borderRadius: 20, padding: 30, alignItems: 'center', marginBottom: 25, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
+  cardTitle: { color: '#95a5a6', fontSize: 12, fontWeight: 'bold', letterSpacing: 1, marginBottom: 10 },
+  balanceText: { color: '#fff', fontSize: 50, fontWeight: 'bold' },
+  debtTag: { backgroundColor: '#e74c3c', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, marginTop: 10 },
+  debtText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
+
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#34495e', marginBottom: 15 },
+  
+  // ESTILOS DE LOS BOTONES RESTAURADOS
+  actionGrid: { flexDirection: 'row', gap: 15, marginBottom: 30 },
+  actionBtn: { flex: 1, padding: 20, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  btnIcon: { fontSize: 32, marginBottom: 5 },
+  btnLabel: { fontWeight: 'bold', fontSize: 14 },
+
+  playerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 10 },
+  rowLeft: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#bdc3c7', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  myAvatar: { backgroundColor: '#2980b9' },
+  avatarText: { color: 'white', fontWeight: 'bold' },
   playerName: { fontSize: 16, fontWeight: '600', color: '#2c3e50' },
-  playerBalance: { fontSize: 14, color: '#27ae60', fontWeight: 'bold' }
+  playerBalance: { fontSize: 16, fontWeight: 'bold', color: '#27ae60' }
 });

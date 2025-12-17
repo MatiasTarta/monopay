@@ -1,93 +1,142 @@
-// backend/src/server.ts
+
 import cors from 'cors';
 import express from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
-import { GameDatabase, GameRoom, Player } from './types';
+import { GameDatabase } from './types';
 
-// --- CONFIGURACIÓN ---
+
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] } // Permitir acceso desde el celular
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// --- BASE DE DATOS (En Memoria) ---
+
+
 const games: GameDatabase = {};
 
-// --- UTILIDADES ---
-// Función para generar código de sala de 4 letras
 const generateRoomCode = () => Math.random().toString(36).substring(2, 6).toUpperCase();
 
-// --- LÓGICA DE SOCKETS ---
+
 io.on('connection', (socket: Socket) => {
-  console.log('🔌 Nuevo dispositivo conectado:', socket.id);
+    console.log('🔌 Nuevo dispositivo conectado:', socket.id);
 
-  // EVENTO 1: UNIRSE O CREAR SALA
-  socket.on('join_game', ({ roomCode, playerName }: { roomCode?: string, playerName: string }) => {
-    
-    // 1. Validar nombre
-    if (!playerName) return;
+    socket.on('join_game', ({ roomCode, playerName, action }: { roomCode?: string, playerName: string, action: 'CREATE' | 'JOIN' }) => {
+        if (!playerName) return;
+        const code = roomCode?.toUpperCase();
 
-    let room: GameRoom | undefined;
-    let code = roomCode?.toUpperCase();
-    let isHost = false;
+        if (action === 'JOIN') {
+            if (!code || !games[code]) {
+                socket.emit('error_message', '❌ La sala no existe. Verifica el código.');
+                return;
+            }
 
-    // 2. ¿Quiere entrar a una sala existente?
-    if (code && games[code]) {
-      room = games[code];
-    } else {
-      // 3. Si no mandó código (o no existe), CREAMOS UNA NUEVA
-      code = generateRoomCode();
-      isHost = true; // Es el primer jugador, así que es el Host
-      
-      // Inicializamos la sala
-      games[code] = {
-        code,
-        players: [],
-        history: [`Sala ${code} creada por ${playerName}`]
-      };
-      
-      room = games[code];
-      console.log(`✨ Sala creada: ${code}`);
-    }
+            const room = games[code];
+            const existingPlayer = room.players.find(p => p.name === playerName);
 
-    // 4. Verificar si el jugador ya está (para reconexiones simples)
-    const existingPlayer = room.players.find(p => p.name === playerName);
+            if (existingPlayer) {
+                existingPlayer.id = socket.id; // Reconexión
+            } else {
+                // Nuevo jugador en sala existente
+                room.players.push({
+                    id: socket.id,
+                    name: playerName,
+                    balance: 1500,
+                    debt: 0,
+                    isHost: false
+                });
+            }
+            socket.join(code);
+            io.to(code).emit('game_updated', room);
+            socket.emit('join_success', room);
+        }
 
-    if (existingPlayer) {
-      // Si ya existe, actualizamos su ID de socket (se reconectó)
-      existingPlayer.id = socket.id;
-      console.log(`🔄 ${playerName} se reconectó a ${code}`);
-    } else {
-      // Si es nuevo, lo agregamos
-      const newPlayer: Player = {
-        id: socket.id,
-        name: playerName,
-        balance: 1500, // Saldo inicial Monopoly
-        debt: 0,
-        isHost
-      };
-      room.players.push(newPlayer);
-      room.history.push(`${playerName} se unió al juego.`);
-      console.log(`👤 ${playerName} entró a ${code}`);
-    }
+        else if (action === 'CREATE') {
+            const newCode = generateRoomCode(); // Siempre generamos uno nuevo
+            games[newCode] = {
+                code: newCode,
+                players: [{
+                    id: socket.id,
+                    name: playerName,
+                    balance: 1500,
+                    debt: 0,
+                    isHost: true // Es el creador
+                }],
+                history: []
+            };
 
-    // 5. Unir el socket al canal de la sala
-    socket.join(code!);
+            socket.join(newCode);
+            socket.emit('join_success', games[newCode]);
+            io.to(newCode).emit('game_updated', games[newCode]);
 
-    // 6. ¡IMPORTANTE! Enviamos la actualización A TODOS en la sala
-    io.to(code!).emit('game_updated', room);
-  });
+            console.log(`✨ Sala creada: ${newCode} por ${playerName}`);
+        }
+    });
 
-  socket.on('disconnect', () => {
-    console.log('❌ Dispositivo desconectado:', socket.id);
-  });
+
+        //operacion de transaccion
+    socket.on('make_transaction', ({ roomCode, targetId, amount, type }) => {
+        const code = roomCode?.toUpperCase();
+        if (!code || !games[code]) return;
+
+        const room = games[code];
+        const sender = room.players.find(p => p.id === socket.id);
+        const amountNum = parseInt(amount);
+
+        if (!sender || isNaN(amountNum) || amountNum <= 0) return;
+
+        // A. TRANSFERENCIA ENTRE JUGADORES (P2P)
+        if (type === 'P2P') {
+            const receiver = room.players.find(p => p.id === targetId);
+
+            if (receiver) {
+                // Lógica: Restar al que envía, sumar al que recibe
+                if (sender.balance >= amountNum) {
+                    sender.balance -= amountNum;
+                    receiver.balance += amountNum;
+                    room.history.push(`${sender.name} transfirió $${amountNum} a ${receiver.name}`);
+                } else {
+                    socket.emit('error_message', '❌ No tienes fondos suficientes.');
+                    return;
+                }
+            }
+        }
+
+        // B. OPERACIONES CON EL BANCO
+        else if (type === 'BANK_LOAN') {
+            // Pedir Préstamo: Sube saldo, Sube deuda
+            sender.balance += amountNum;
+            sender.debt += amountNum;
+            room.history.push(`${sender.name} pidió un préstamo de $${amountNum}`);
+        }
+        else if (type === 'BANK_PAY') {
+            // Pagar al Banco: Baja saldo, Baja deuda
+            if (sender.balance >= amountNum) {
+                sender.balance -= amountNum;
+                // La deuda no puede ser negativa, pagamos lo que se pueda
+                const payment = Math.min(sender.debt, amountNum);
+                sender.debt -= payment;
+                room.history.push(`${sender.name} pagó $${amountNum} al banco`);
+            } else {
+                socket.emit('error_message', '❌ No tienes fondos para pagar al banco.');
+                return;
+            }
+        }
+
+        // FINAL: Enviar estado actualizado a TODOS
+        io.to(code).emit('game_updated', room);
+        socket.emit('transaction_success'); // Confirmación al usuario
+    });
+
+    socket.on('disconnect', () => {
+        console.log('❌ Dispositivo desconectado:', socket.id);
+    });
 });
 
 // --- INICIAR ---
 const PORT = 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 Servidor listo en puerto ${PORT}`);
+    console.log(`🚀 Servidor listo en puerto ${PORT}`);
 });
